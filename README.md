@@ -2,7 +2,7 @@
 
 Evals for [Pixie](../pixie)'s design skills, kept out of the Pixie repo so they never ship with the plugin. Each eval runs a Pixie skill with `claude -p` against a small fixture app, then grades what the skill left behind with scripted, deterministic pass/fail checks. No LLM judges any result.
 
-This repo is local only: it has no remote.
+This repo lives at [lonnieezell/pixie-evals](https://github.com/lonnieezell/pixie-evals). [GLOSSARY.md](GLOSSARY.md) defines its terms.
 
 ## Requirements
 
@@ -10,7 +10,7 @@ This repo is local only: it has no remote.
 - Node 20+ and npm
 - PHP 8.3+ with `pdo_sqlite` and `sqlite3`, and Composer
 - The `claude` CLI, signed in
-- For `critique-*` cases: Pixie's Playwright cache, installed the way `/pixie:design-setup` installs it:
+- For `critique-*` and `design-*` cases: Pixie's Playwright cache, installed the way `/pixie:design-setup` installs it:
 
   ```bash
   npm install --prefix ~/.cache/pixie/playwright --save-exact playwright@1.65.1 axe-core@4.14.1
@@ -26,14 +26,15 @@ This repo is local only: it has no remote.
 ./run-evals --pixie ../pixie --grade-only results/iteration-3   # grade an earlier run again
 ```
 
-`--pixie` is the path to any local Pixie checkout, such as a branch's worktree. The runner prints pass/fail for each task and each grader, and exits 1 if anything failed. These are real, billed model runs. A setup case takes a few minutes, and the critique case takes longer.
+`--pixie` is the path to any local Pixie checkout, such as a branch's worktree. The runner prints pass/fail for each task and each grader, and exits 1 if anything failed. These are real, billed model runs. A setup case takes a few minutes, the critique case longer, and a design case longest: it explores, critiques and builds a design, with a 90-minute timeout.
 
 Each case runs like this:
 
-1. Copy the case's fixture into `results/iteration-N/CASE/with_skill/outputs/repo/`. Only tracked and unignored files are copied, so no `vendor/` or `node_modules/` comes along. Then add the case's input files and commit, so the skill sees a clean git repo.
-2. For a case with `serve` in its `checks.json`, start the fixture with its `start.sh` on the port given there, and wait for it to answer. `critique-react-reports` serves on port 5273, so it doesn't clash with a Vite app you're already running on 5173. The run fails early if the port is taken.
+1. Copy the case's fixture into `results/iteration-N/CASE/with_skill/outputs/repo/` and commit it. Only tracked and unignored files are copied, so no `vendor/` or `node_modules/` comes along. Then add the case's input files and commit them too, so the skill sees a clean git repo. An input inventory whose `Source commit` is all zeros gets the fixture's commit, so the skill finds it fresh instead of rescanning. The repo is tagged `eval-base`: graders read what the run changed against it.
+2. For a case with `serve` in its `checks.json`, start the fixture with its `start.sh` on the port given there, and wait for it to answer. The ports (5273 for `critique-react-reports`, 5274, 8001 and 8081 for the design cases) don't clash with a fixture you're already running on its default port. The run fails early if the port is taken.
 3. Run `claude -p "PROMPT" --plugin-dir PIXIE --setting-sources project,local` in that repo. Skipping user settings keeps an installed copy of Pixie, and your other plugins and hooks, out of the run. The prompt tells the skill it's unattended, and how to answer its questions. `AskUserQuestion` is disallowed. The transcript is saved as `outputs/transcript.jsonl`.
-4. Stop the server, and grade the repo.
+4. For a case with `screen` in its `checks.json` (the design cases), run axe while the app is still up, with `evalkit/axe.mjs` and Pixie's Playwright cache, on that screen and on every state of the winner's preview. The report is saved as `outputs/axe.json`.
+5. Stop the server, and grade the repo.
 
 Results follow skill-creator's workspace layout (`eval_metadata.json`, `with_skill/grading.json` with `text`, `passed` and `evidence` per grader, and `timing.json`), so skill-creator's viewer and benchmark scripts can read them.
 
@@ -45,6 +46,9 @@ Cases live in `evals/`, in skill-creator's case-folder format: `prompt.md`, `cas
 |---|---|---|
 | `setup-react`, `setup-laravel`, `setup-ci4` | `/pixie:design-setup` | inventory written, stack detected, legacy component marked legacy, its replacement marked preferred, repeated pattern mined |
 | `critique-react-reports` | `/pixie:design-critique` | report written, every axe violation reported, every raw colour reported, every finding cites a rubric item, a saved screenshot and its state |
+| `design-react`, `design-laravel`, `design-ci4` | `/pixie:design` | decision record written, losing directions deleted, a preferred component reused (and each new component's reason recorded), no legacy component used, one test per state of the winner's matrix, the test suite passes, the preview harness gated out of production, no raw values, and no axe violations on the screen or the winner's preview |
+
+The design cases all ask for the same thing, "a recent-orders section for the dashboard", so results compare across stacks. Each starts from a correct inventory (`files/docs/agents/design-system.md`), so a `/design-setup` mistake can't fail them. The prompt approves the first brief, picks the first direction and installs the permanent preview harness, so there's a harness to grade. The code graders read only the lines the run added, under the case's `source` folders, leaving out previews and tests.
 
 ## Fixtures
 
@@ -62,17 +66,19 @@ Each fixture has the same traps:
 
 Each `start.sh` installs dependencies, builds, seeds a SQLite database from the factories where the app has one, and serves the app. Set `PORT` to serve on another port.
 
+Each fixture's test suite passes from a clean checkout once its dependencies are installed. The `tests-pass` grader runs it: `npm test` (Vitest and Testing Library) in `react-shadcn`, `php artisan test` in `laravel-bootstrap`, and `vendor/bin/phpunit` in `ci4`.
+
 **The broken screen.** `/reports` in the React fixture is broken on purpose, as the critique graders' negative control. It has 4 axe violations (`image-alt`, `label`, `button-name`, `color-contrast`) and 3 raw colours in `src/pages/Reports.tsx` (`text-[#c4c4c4]`, `bg-[#ff00aa]`, `#b0b0b0`). A critique that leaves any of them unreported fails.
 
 ## Testing the graders
 
-`controls/CASE/VARIANT/` holds hand-made skill outputs, which are laid over the case's fixture and graded. `good` must pass every grader. `bad-CHECK` must fail that check: for example, `controls/setup-react/bad-legacy-marked-legacy` is an inventory that falls for the legacy trap.
+`controls/CASE/VARIANT/` holds hand-made skill outputs. Each is laid over the case's repo, built the way a real run builds it, so the control reads as the run's changes, and then graded. `good` must pass every grader. `bad-CHECK` is laid over `good`, so it holds only its mistake, and it must fail that check: for example, `controls/setup-react/bad-legacy-marked-legacy` is an inventory that falls for the legacy trap. A control's `_outputs/` folder stands in for what the runner saves next to the repo, such as `axe.json`.
 
 ```bash
 python3 -m unittest discover -s tests -t .
 ```
 
-`PIXIE=/path/to/pixie` points the tests at another checkout. The critique graders read Pixie's rubric from it.
+`PIXIE=/path/to/pixie` points the tests at another checkout. The critique graders read Pixie's rubric from it. The `tests-pass` and `harness-gated` graders run the fixture's own tools, so their controls need each fixture's dependencies and `.env`: run each fixture's `start.sh` once first. Without them, those controls are skipped. The suite takes about 30 seconds.
 
 ## Adding a case
 
