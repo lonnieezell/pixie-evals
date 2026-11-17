@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: setup-ci4
+expected_outcome: |
+  docs/agents/design-system.md catalogues the CodeIgniter 4 fixture. The partials/alert view is legacy and the
+  AlertCell view cell is preferred, even though the partial is loaded from more views. The stat panel repeated
+  in dashboard.php and orders.php is listed under Patterns.

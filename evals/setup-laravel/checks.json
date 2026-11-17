@@ -1,0 +1,11 @@
+{
+  "fixture": "laravel-bootstrap",
+  "stack": ["Laravel", "Blade", "Bootstrap"],
+  "legacy": ["resources/views/partials/alert.blade.php"],
+  "preferred": ["resources/views/components/alert.blade.php"],
+  "pattern": {
+    "classes": "card border-0 shadow-sm h-100",
+    "span": 3,
+    "files": ["resources/views/dashboard.blade.php", "resources/views/orders/index.blade.php"]
+  }
+}

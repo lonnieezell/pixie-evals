@@ -1,0 +1,11 @@
+{
+  "fixture": "react-shadcn",
+  "stack": ["React", "Tailwind"],
+  "legacy": ["src/components/PrimaryButton.tsx"],
+  "preferred": ["src/components/ui/button.tsx"],
+  "pattern": {
+    "classes": "rounded-card border border-border bg-surface p-6",
+    "span": 2,
+    "files": ["src/pages/Dashboard.tsx", "src/pages/Orders.tsx"]
+  }
+}

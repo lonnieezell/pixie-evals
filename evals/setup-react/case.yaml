@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: setup-react
+expected_outcome: |
+  docs/agents/design-system.md catalogues the React + Tailwind fixture. PrimaryButton is legacy and the
+  shadcn Button is preferred, even though PrimaryButton is used in more pages. The stat card repeated in
+  Dashboard.tsx and Orders.tsx is listed under Patterns.

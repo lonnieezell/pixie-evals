@@ -1,0 +1,10 @@
+{
+  "fixture": "react-shadcn",
+  "serve": { "port": 5273, "ready": "http://localhost:5273/reports" },
+  "axe_rules": ["image-alt", "label", "button-name", "color-contrast"],
+  "raw_values": [
+    { "match": "text-[#c4c4c4]", "file": "src/pages/Reports.tsx" },
+    { "match": "bg-[#ff00aa]", "file": "src/pages/Reports.tsx" },
+    { "match": "#b0b0b0", "file": "src/pages/Reports.tsx" }
+  ]
+}

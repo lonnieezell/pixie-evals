@@ -1,0 +1,11 @@
+{
+  "fixture": "ci4",
+  "stack": ["CodeIgniter"],
+  "legacy": ["app/Views/partials/alert.php"],
+  "preferred": ["app/Cells/AlertCell.php", "app/Cells/alert.php"],
+  "pattern": {
+    "classes": "panel panel--stat",
+    "span": 2,
+    "files": ["app/Views/dashboard.php", "app/Views/orders.php"]
+  }
+}

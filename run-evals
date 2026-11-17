@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Run Pixie's design-skill evals against a local Pixie checkout and print pass/fail per task and per grader.
+
+  ./run-evals --pixie ../pixie                        run every case
+  ./run-evals --pixie ../pixie --case setup-react     run some cases
+  ./run-evals --pixie ../pixie --grade-only results/iteration-3   grade an earlier run again
+"""
+import argparse
+import sys
+from pathlib import Path
+
+from evalkit.cases import load_cases
+from evalkit.runner import check_pixie, next_iteration, regrade, report, run_case
+
+ROOT = Path(__file__).resolve().parent
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--pixie", required=True, type=Path, help="path to a local Pixie checkout")
+    p.add_argument("--case", action="append", help="run only this case (repeatable)")
+    p.add_argument("--grade-only", type=Path, metavar="ITERATION", help="grade an earlier iteration's repos again")
+    a = p.parse_args()
+    pixie = a.pixie.resolve()
+    check_pixie(pixie)
+    cases = load_cases(ROOT / "evals", a.case)
+
+    if a.grade_only:
+        rows = regrade(a.grade_only.resolve(), cases, pixie)
+    else:
+        iteration = next_iteration(ROOT / "results")
+        print(f"Results: {iteration}")
+        rows = []
+        for index, case in enumerate(cases, 1):
+            print(f"Running {case.name}...", flush=True)
+            results, error = run_case(case, index, iteration, pixie, ROOT / "fixtures")
+            rows.append((case, results, error))
+    sys.exit(0 if report(rows) else 1)
+
+
+if __name__ == "__main__":
+    main()
