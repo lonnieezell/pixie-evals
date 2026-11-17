@@ -1,0 +1,13 @@
+{
+  "fixture": "ci4",
+  "serve": { "port": 8081, "ready": "http://localhost:8081/" },
+  "screen": "/",
+  "source": ["app", "public/css"],
+  "previews": ["app/Previews", "app/Views/previews", "app/Views/__preview.php", "app/Config/PreviewRoutes.php"],
+  "preview_file": "app/Previews/{slug}.php",
+  "components": ["app/Cells"],
+  "tests": { "command": ["vendor/bin/phpunit"], "files": ["tests/*.php"] },
+  "preferred": ["AlertCell"],
+  "legacy": ["partials/alert"],
+  "harness": "ci4"
+}

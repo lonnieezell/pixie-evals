@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: design-ci4
+expected_outcome: |
+  /pixie:design explores 2 directions for a recent-orders section on the CodeIgniter 4 fixture's dashboard,
+  starting from a correct design inventory. The first direction wins. It's built into a production view cell from
+  the catalogued AlertCell, never the legacy partials/alert and without raw colours, with one passing test per
+  state of its matrix. Its preview stays in a permanent /__preview route registered only in the development
+  environment. The losing direction's files are gone, and a decision record is written under docs/design/decisions/.
+context:
+  scaffold_script: place-files.sh

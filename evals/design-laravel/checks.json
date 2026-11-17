@@ -1,0 +1,13 @@
+{
+  "fixture": "laravel-bootstrap",
+  "serve": { "port": 8001, "ready": "http://localhost:8001/" },
+  "screen": "/",
+  "source": ["app", "resources/views", "resources/sass", "resources/js", "routes"],
+  "previews": ["resources/previews", "resources/views/__preview.blade.php", "resources/views/components/previews", "routes/preview.php"],
+  "preview_file": "resources/previews/{slug}.php",
+  "components": ["resources/views/components", "app/View/Components"],
+  "tests": { "command": ["php", "artisan", "test"], "files": ["tests/*.php"] },
+  "preferred": ["<x-alert"],
+  "legacy": ["partials.alert"],
+  "harness": "laravel"
+}

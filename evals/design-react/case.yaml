@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: design-react
+expected_outcome: |
+  /pixie:design explores 2 directions for a recent-orders section on the React fixture's dashboard, starting from
+  a correct design inventory. The first direction wins. It's built into production code from the catalogued
+  Button, never the legacy PrimaryButton and without raw colours, with one passing test per state of its matrix.
+  Its preview stays in a permanent /__preview harness that the production build leaves out. The losing
+  direction's files are gone, and a decision record is written under docs/design/decisions/.
+context:
+  scaffold_script: place-files.sh

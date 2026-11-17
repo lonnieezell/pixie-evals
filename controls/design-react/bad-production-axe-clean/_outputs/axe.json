@@ -1,0 +1,11 @@
+[
+  { "label": "screen", "url": "http://localhost:5274/", "error": null, "violations": [] },
+  { "label": "empty", "url": "http://localhost:5274/__preview/recent-orders-compact-list?state=empty", "error": null, "violations": [] },
+  { "label": "single", "url": "http://localhost:5274/__preview/recent-orders-compact-list?state=single", "error": null, "violations": [] },
+  { "label": "typical", "url": "http://localhost:5274/__preview/recent-orders-compact-list?state=typical", "error": null, "violations": [] },
+  { "label": "overflow", "url": "http://localhost:5274/__preview/recent-orders-compact-list?state=overflow", "error": null, "violations": [] },
+  { "label": "error", "url": "http://localhost:5274/__preview/recent-orders-compact-list?state=error", "error": null, "violations": [
+    { "id": "color-contrast", "impact": "serious", "nodes": 1 }
+  ] },
+  { "label": "loading", "url": "http://localhost:5274/__preview/recent-orders-compact-list?state=loading", "error": null, "violations": [] }
+]

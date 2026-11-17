@@ -11,11 +11,14 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from .checks import AXE, Context, axe_targets
 from .grade import grade
 from .workdir import prepare
 
 TOOLS = "Bash,Read,Write,Edit,Glob,Grep,Agent,Skill,TodoWrite"
 SERVE_TIMEOUT = 900
+AXE_TIMEOUT = 600
+AXE_SCRIPT = Path(__file__).with_name("axe.mjs")
 PLAYWRIGHT = Path.home() / ".cache" / "pixie" / "playwright"
 
 
@@ -98,6 +101,19 @@ def run_claude(case, repo, pixie, transcript):
     return f"claude exited with {result.returncode}" if result.returncode else None
 
 
+def check_axe(case, repo, pixie, outputs):
+    """While the app is still up, run axe on the pages the production-axe-clean check covers, into
+    outputs/axe.json. Returns an error note, or None."""
+    targets = axe_targets(Context(repo, case.spec, pixie))
+    origin = f"http://localhost:{case.spec['serve']['port']}"
+    command = ["node", str(AXE_SCRIPT), str(outputs / AXE), origin, *(f"{label}={path}" for label, path in targets)]
+    try:
+        done = subprocess.run(command, capture_output=True, text=True, timeout=AXE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return f"axe timed out after {AXE_TIMEOUT}s"
+    return f"axe exited with {done.returncode}: {done.stderr.strip()[-300:]}" if done.returncode else None
+
+
 def write_grading(run_dir, results, timing):
     passed = sum(r["passed"] for r in results)
     grading = {
@@ -129,6 +145,8 @@ def run_case(case, index, iteration, pixie, fixtures):
             with (outputs / "server.log").open("w") as log:
                 server = serve(repo, case.spec["serve"], log)
         error = run_claude(case, repo, pixie, outputs / "transcript.jsonl")
+        if case.spec.get("screen") and server:
+            error = "; ".join(filter(None, [error, check_axe(case, repo, pixie, outputs)])) or None
     except RuntimeError as e:
         error = str(e)
     finally:
@@ -136,7 +154,7 @@ def run_case(case, index, iteration, pixie, fixtures):
     executor = time.monotonic() - started
 
     started = time.monotonic()
-    results = grade(case, repo, pixie)
+    results = grade(case, repo, pixie, outputs)
     timing = {"executor_duration_seconds": round(executor, 1),
               "grader_duration_seconds": round(time.monotonic() - started, 1)}
     timing["total_duration_seconds"] = round(sum(timing.values()), 1)
@@ -152,7 +170,7 @@ def regrade(iteration, cases, pixie):
         run_dir = iteration / case.name / "with_skill"
         if not (run_dir / "outputs" / "repo").is_dir():
             continue
-        results = grade(case, run_dir / "outputs" / "repo", pixie)
+        results = grade(case, run_dir / "outputs" / "repo", pixie, run_dir / "outputs")
         timing = json.loads((run_dir / "timing.json").read_text()) if (run_dir / "timing.json").is_file() else {}
         write_grading(run_dir, results, timing)
         out.append((case, results, None))
