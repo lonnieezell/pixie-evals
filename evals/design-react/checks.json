@@ -1,0 +1,13 @@
+{
+  "fixture": "react-shadcn",
+  "serve": { "port": 5274, "ready": "http://localhost:5274/" },
+  "screen": "/",
+  "source": ["src"],
+  "previews": ["src/__preview", "*/previews/*"],
+  "preview_file": "src/__preview/previews/{slug}.preview.tsx",
+  "components": ["src/components"],
+  "tests": { "command": ["npm", "test"], "files": ["*.test.tsx", "*.test.ts"] },
+  "preferred": ["ui/button"],
+  "legacy": ["PrimaryButton"],
+  "harness": "vite"
+}
