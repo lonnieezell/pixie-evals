@@ -16,13 +16,18 @@ def run_dirs(config_dir):
     return sorted(found, key=lambda p: int(p.name[len("run-"):]))
 
 
+def rate(counts):
+    """A config's pass rate for one grader, or None when it has no graded runs."""
+    return counts["passed"] / counts["runs"] if counts["runs"] else None
+
+
 def compare(iteration, cases):
     """comparison.json's data: for each case with results, each grader's pass count in both configs, and the
     case's judgements, if it has any."""
     out = []
     for case in cases:
         case_dir = iteration / case.name
-        if not all((case_dir / config).is_dir() for config in CONFIGS):
+        if not any((case_dir / config).is_dir() for config in CONFIGS):
             continue
         gradings = {config: [json.loads((run / "grading.json").read_text()) for run in run_dirs(case_dir / config)
                              if (run / "grading.json").is_file()] for config in CONFIGS}
@@ -32,7 +37,6 @@ def compare(iteration, cases):
             for config, runs in gradings.items():
                 passed = sum(any(e["text"] == text and e["passed"] for e in g["expectations"]) for g in runs)
                 row[config] = {"passed": passed, "runs": len(runs), "indicative_only": len(runs) == 1}
-            rate = lambda counts: counts["passed"] / counts["runs"] if counts["runs"] else None
             row["differs"] = rate(row["new_skill"]) != rate(row["old_skill"])
             graders.append(row)
         errors = [f"{config} {run.name}: {(run / ERROR).read_text().strip()}" for config in CONFIGS
@@ -82,7 +86,8 @@ def report(data):
         for r in runs:
             if not r["preference"]["result"].endswith("preferred"):
                 print(f"    run-{r['run']}: {r['preference']['result']}")
-            print("\n".join(distinctness_lines(r)))
+            for line in distinctness_lines(r):
+                print(line)
     for error in errors:
         print(f"\nRUN ERROR  {error}")
     print(f"\n{len(errors)} run errors" if errors else "\nEvery run completed")

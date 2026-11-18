@@ -129,14 +129,20 @@ def write_grading(run_dir, results, timing):
     (run_dir / "grading.json").write_text(json.dumps(grading, indent=2) + "\n")
 
 
+def head(pixie):
+    """The commit a Pixie checkout is at, or '' if it isn't a git checkout (any more)."""
+    try:
+        return subprocess.run(["git", "rev-parse", "HEAD"], cwd=pixie, capture_output=True, text=True).stdout.strip()
+    except OSError:
+        return ""
+
+
 def write_metadata(case, index, case_dir, configs=None):
     """eval_metadata.json; in a comparison, also each config's Pixie checkout and its commit."""
     metadata = {"eval_id": index, "eval_name": case.name, "prompt": case.prompt,
                 "assertions": [text for _, text in case.graders]}
     if configs:
-        metadata["configs"] = {name: {"pixie": str(pixie), "commit": subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=pixie, capture_output=True, text=True).stdout.strip()}
-            for name, pixie in configs.items()}
+        metadata["configs"] = {name: {"pixie": str(pixie), "commit": head(pixie)} for name, pixie in configs.items()}
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "eval_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
@@ -224,8 +230,7 @@ def regrade_comparison(iteration, cases):
             if name not in configs:
                 continue
             pixie = Path(configs[name]["pixie"])
-            now = subprocess.run(["git", "rev-parse", "HEAD"], cwd=pixie, capture_output=True, text=True).stdout
-            if now.strip() != configs[name]["commit"]:
+            if head(pixie) != configs[name]["commit"]:
                 print(f"warning: {case.name} {name}: {pixie} is no longer at {configs[name]['commit'][:12]}, "
                       "the commit it ran with; grading against what it holds now", flush=True)
             for run_dir in run_dirs(case_dir / name):
