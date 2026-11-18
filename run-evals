@@ -34,33 +34,30 @@ def main():
     check_pixie(pixie)
     cases = load_cases(ROOT / "evals", a.case)
 
-    if a.grade_only and any(a.grade_only.glob("*/new_skill")):
-        iteration = a.grade_only.resolve()
-        regrade_comparison(iteration, cases)
-        sys.exit(0 if write_and_report(iteration, cases, []) else 1)
     if a.grade_only:
-        rows = regrade(a.grade_only.resolve(), cases, pixie)
-    elif a.against:
-        against = a.against.resolve()
+        iteration = a.grade_only.resolve()
+        if any(iteration.glob("*/new_skill")):
+            regrade_comparison(iteration, cases)
+            sys.exit(0 if write_and_report(iteration, cases, []) else 1)
+        sys.exit(0 if report(regrade(iteration, cases, pixie)) else 1)
+
+    against = a.against.resolve() if a.against else None
+    if against:
         check_pixie(against)
-        iteration = next_iteration(ROOT / "results")
-        print(f"Results: {iteration}")
-        errors = []
-        for index, case in enumerate(cases, 1):
-            print(f"Running {case.name}...", flush=True)
+    iteration = next_iteration(ROOT / "results")
+    print(f"Results: {iteration}")
+    rows, errors = [], []
+    for index, case in enumerate(cases, 1):
+        print(f"Running {case.name}...", flush=True)
+        if against:
             errors += run_comparison(case, index, iteration, {"new_skill": pixie, "old_skill": against}, a.runs,
                                      ROOT / "fixtures", a.judge_model)
-        sys.exit(0 if write_and_report(iteration, cases, errors) else 1)
-    else:
-        iteration = next_iteration(ROOT / "results")
-        print(f"Results: {iteration}")
-        rows = []
-        for index, case in enumerate(cases, 1):
-            print(f"Running {case.name}...", flush=True)
+        else:
             write_metadata(case, index, iteration / case.name)
             results, error = run_case(case, iteration / case.name / "with_skill", pixie, ROOT / "fixtures")
             rows.append((case, results, error))
-    sys.exit(0 if report(rows) else 1)
+    ok = write_and_report(iteration, cases, errors) if against else report(rows)
+    sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from .checks import DECISIONS, record_slug
+from .checks import newest_record as record
 from .comparison import CONFIGS, JUDGEMENT
 from .markdown import section, table_rows
 
@@ -79,13 +79,6 @@ def check_cited(cited, folder):
         path = (root / str(name)).resolve()
         if root not in path.parents or not path.is_file():
             raise NotJudged(f"it cites {name!r}, a screenshot it wasn't given")
-
-
-def record(repo):
-    """The newest decision record in a run's repo, or None."""
-    folder = Path(repo) / DECISIONS
-    records = sorted(p for p in folder.glob("*.md") if record_slug(p)) if folder.is_dir() else []
-    return records[-1] if records else None
 
 
 def shots(found, production):

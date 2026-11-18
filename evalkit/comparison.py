@@ -57,17 +57,20 @@ def report(data, errors):
         print("\nJudgements (a model's tiebreaker, never pass/fail)")
     for case in judged:
         runs = case["judgements"]["runs"]
-        tally = {p: sum(r["preference"]["result"].startswith(p) for r in runs) for p in PREFERENCES}
+        results = [r["preference"]["result"] for r in runs]
+        tally = {p: results.count(p) for p in PREFERENCES[:-1]}
+        tally["not judged"] = len(results) - sum(tally.values())
         print(f"\n{case['case']}\n  screenshot preference: " + ", ".join(f"{p} {n}" for p, n in tally.items()))
         for r in runs:
             if not r["preference"]["result"].endswith("preferred"):
                 print(f"    run-{r['run']}: {r['preference']['result']}")
             for config, found in r.get("distinctness", {}).items():
-                if "axes" not in found:
+                if "axes" in found:
+                    for axis in found["axes"]:
+                        verdict = "differ" if axis["differs"] else "don't differ"
+                        print(f"  run-{r['run']} {config} directions {verdict} on {axis['axis']}: {axis['reason']}")
+                else:
                     print(f"  run-{r['run']} {config} direction distinctness: {found['result']}")
-                for axis in found.get("axes", []):
-                    verdict = "differ" if axis["differs"] else "don't differ"
-                    print(f"  run-{r['run']} {config} directions {verdict} on {axis['axis']}: {axis['reason']}")
     for error in errors:
         print(f"\nRUN ERROR  {error}")
     print(f"\n{len(errors)} run errors" if errors else "\nEvery run completed")
