@@ -133,7 +133,9 @@ class DistinctnessTest(unittest.TestCase):
         return {"axis": name, "differs": differs, "reason": "seen", "screenshots": ["card-grid-typical-1280.png"]}
 
     def test_each_axis_the_record_names(self):
-        result, fake = self.judge({"axes": [self.axis("Density", True), self.axis("Emphasis", False)]})
+        # A real judge cites no screenshot for an axis the directions don't differ on.
+        result, fake = self.judge({"axes": [self.axis("Density", True), {**self.axis("Emphasis", False),
+                                                                          "screenshots": []}]})
         self.assertEqual(result, {"result": "judged", "axes": [
             {"axis": "Density", "differs": True, "reason": "seen"},
             {"axis": "Emphasis", "differs": False, "reason": "seen"},

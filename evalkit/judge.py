@@ -73,10 +73,10 @@ def ask(prompt, folder, model):
 
 
 def check_cited(cited, folder):
-    """Every screenshot the answer cites must be a PNG in the judge's folder."""
+    """Every screenshot the answer cites must be a PNG in the judge's folder. It may cite none."""
     root = Path(folder).resolve()
-    if not isinstance(cited, list) or not cited:
-        raise NotJudged("its answer cites no screenshots")
+    if not isinstance(cited, list):
+        raise NotJudged("its answer's screenshots aren't a list")
     for name in cited:
         try:
             path = (root / str(name)).resolve()
