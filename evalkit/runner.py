@@ -1,5 +1,7 @@
 """Run each case with `claude -p` against a local Pixie checkout, then grade it. Results use skill-creator's
-workspace layout: results/iteration-N/CASE/{eval_metadata.json, with_skill/{outputs/, grading.json, timing.json}}."""
+workspace layout: results/iteration-N/CASE/{eval_metadata.json, with_skill/{outputs/, grading.json, timing.json}}.
+A comparison uses its benchmark layout instead: CASE/{new_skill,old_skill}/run-K/{outputs/, grading.json,
+timing.json}."""
 import json
 import os
 import shutil
@@ -12,7 +14,9 @@ import urllib.request
 from pathlib import Path
 
 from .checks import AXE, Context, axe_targets
+from .comparison import CONFIGS, ERROR, run_dirs
 from .grade import grade
+from .judge import judge_case
 from .workdir import prepare
 
 TOOLS = "Bash,Read,Write,Edit,Glob,Grep,Agent,Skill,TodoWrite"
@@ -125,15 +129,28 @@ def write_grading(run_dir, results, timing):
     (run_dir / "grading.json").write_text(json.dumps(grading, indent=2) + "\n")
 
 
-def run_case(case, index, iteration, pixie, fixtures):
-    case_dir = iteration / case.name
-    run_dir = case_dir / "with_skill"
+def head(pixie):
+    """The commit a Pixie checkout is at, or '' if it isn't a git checkout (any more)."""
+    try:
+        return subprocess.run(["git", "rev-parse", "HEAD"], cwd=pixie, capture_output=True, text=True).stdout.strip()
+    except OSError:
+        return ""
+
+
+def write_metadata(case, index, case_dir, configs=None):
+    """eval_metadata.json; in a comparison, also each config's Pixie checkout and its commit."""
+    metadata = {"eval_id": index, "eval_name": case.name, "prompt": case.prompt,
+                "assertions": [text for _, text in case.graders]}
+    if configs:
+        metadata["configs"] = {name: {"pixie": str(pixie), "commit": head(pixie)} for name, pixie in configs.items()}
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "eval_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+
+
+def run_case(case, run_dir, pixie, fixtures):
+    """Run the case once against `pixie`, into `run_dir` (with_skill, or a comparison's CONFIG/run-K)."""
     outputs = run_dir / "outputs"
     outputs.mkdir(parents=True)
-    (case_dir / "eval_metadata.json").write_text(json.dumps({
-        "eval_id": index, "eval_name": case.name, "prompt": case.prompt,
-        "assertions": [text for _, text in case.graders],
-    }, indent=2) + "\n")
     repo = outputs / "repo"
     prepare(case, fixtures, repo)
 
@@ -163,18 +180,61 @@ def run_case(case, index, iteration, pixie, fixtures):
     return results, error
 
 
+def run_comparison(case, index, iteration, configs, runs, fixtures, judge_model):
+    """Run the case `runs` times against each config ({new_skill: checkout, old_skill: checkout}), one run after
+    another, since each case serves its fixture on a fixed port. A run's error is saved in its error.txt. Then judge
+    a design-* case."""
+    case_dir = iteration / case.name
+    write_metadata(case, index, case_dir, configs)
+    for k in range(1, runs + 1):
+        for name, pixie in configs.items():
+            print(f"  {name} run-{k}...", flush=True)
+            run_dir = case_dir / name / f"run-{k}"
+            _, error = run_case(case, run_dir, pixie, fixtures)
+            if error:
+                (run_dir / ERROR).write_text(error + "\n")
+    if case.name.startswith("design-"):
+        print("  judging...", flush=True)
+        judge_case(case, case_dir, runs, judge_model)
+
+
+def regrade_run(case, run_dir, pixie):
+    """Grade one earlier run's repo again. Returns its results, or None if it has no repo."""
+    if not (run_dir / "outputs" / "repo").is_dir():
+        return None
+    results = grade(case, run_dir / "outputs" / "repo", pixie, run_dir / "outputs")
+    timing = json.loads((run_dir / "timing.json").read_text()) if (run_dir / "timing.json").is_file() else {}
+    write_grading(run_dir, results, timing)
+    return results
+
+
 def regrade(iteration, cases, pixie):
     """Grade an earlier iteration's repos again, for when a grader changes."""
     out = []
     for case in cases:
-        run_dir = iteration / case.name / "with_skill"
-        if not (run_dir / "outputs" / "repo").is_dir():
-            continue
-        results = grade(case, run_dir / "outputs" / "repo", pixie, run_dir / "outputs")
-        timing = json.loads((run_dir / "timing.json").read_text()) if (run_dir / "timing.json").is_file() else {}
-        write_grading(run_dir, results, timing)
-        out.append((case, results, None))
+        results = regrade_run(case, iteration / case.name / "with_skill", pixie)
+        if results is not None:
+            out.append((case, results, None))
     return out
+
+
+def regrade_comparison(iteration, cases):
+    """Grade every run of both configs of an earlier comparison again, each against the checkout it ran with.
+    Saved judgements are kept, and the judge never runs."""
+    for case in cases:
+        case_dir = iteration / case.name
+        if not (case_dir / "eval_metadata.json").is_file():
+            continue
+        configs = json.loads((case_dir / "eval_metadata.json").read_text()).get("configs", {})
+        for name in CONFIGS:
+            if name not in configs:
+                continue
+            pixie = Path(configs[name]["pixie"])
+            if head(pixie) != configs[name]["commit"]:
+                print(f"warning: {case.name} {name}: {pixie} is no longer at {configs[name]['commit'][:12]}, "
+                      "the commit it ran with; grading against what it holds now", flush=True)
+            for run_dir in run_dirs(case_dir / name):
+                regrade_run(case, run_dir, pixie)
 
 
 def report(rows):

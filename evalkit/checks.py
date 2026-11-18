@@ -35,10 +35,7 @@ class Context:
         return reports[-1] if reports else None
 
     def record(self):
-        """The newest design decision record (named YYYY-MM-DD-SLUG.md), or None."""
-        folder = self.repo / DECISIONS
-        records = sorted(p for p in folder.glob("*.md") if record_slug(p)) if folder.is_dir() else []
-        return records[-1] if records else None
+        return newest_record(self.repo)
 
     def git(self, *args):
         return subprocess.run(["git", *args], cwd=self.repo, check=True, capture_output=True, text=True).stdout
@@ -323,6 +320,13 @@ def decision_record_written(ctx):
         return False, f"{record.name} links screenshots that don't exist: {', '.join(missing)}"
     return True, (f"{DECISIONS}/{record.name} has every section, {len(found)} directions with {chosen[0]} chosen, "
                   f"and its {len(shots)} screenshots")
+
+
+def newest_record(repo):
+    """The repo's newest design decision record (named YYYY-MM-DD-SLUG.md), or None."""
+    folder = Path(repo) / DECISIONS
+    records = sorted(p for p in folder.glob("*.md") if record_slug(p)) if folder.is_dir() else []
+    return records[-1] if records else None
 
 
 def record_slug(record):
