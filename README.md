@@ -1,6 +1,6 @@
 # pixie-evals
 
-Evals for [Pixie](../pixie)'s design skills, kept out of the Pixie repo so they never ship with the plugin. Each eval runs a Pixie skill with `claude -p` against a small fixture app, then grades what the skill left behind with scripted, deterministic pass/fail checks. No LLM judges any result.
+Evals for [Pixie](../pixie)'s design skills, kept out of the Pixie repo so they never ship with the plugin. Each eval runs a Pixie skill with `claude -p` against a small fixture app, then grades what the skill left behind with scripted, deterministic pass/fail checks. A model never decides whether a grader passes. The only model opinions are a [comparison](#compare-two-pixie-versions)'s judgements, which are a tiebreaker and never pass/fail.
 
 This repo lives at [lonnieezell/pixie-evals](https://github.com/lonnieezell/pixie-evals). [GLOSSARY.md](GLOSSARY.md) defines its terms.
 
@@ -37,6 +37,31 @@ Each case runs like this:
 5. Stop the server, and grade the repo.
 
 Results follow skill-creator's workspace layout (`eval_metadata.json`, `with_skill/grading.json` with `text`, `passed` and `evidence` per grader, and `timing.json`), so skill-creator's viewer and benchmark scripts can read them.
+
+## Compare two Pixie versions
+
+```bash
+./run-evals --pixie ../pixie --against ../pixie-main --runs 3                       # every case
+./run-evals --pixie ../pixie --against ../pixie-main --case design-react --judge-model sonnet
+./run-evals --pixie ../pixie --grade-only results/iteration-7                       # grade a comparison again
+```
+
+A comparison runs the same cases against two local Pixie checkouts: `--pixie` is `new_skill`, `--against` is `old_skill`. Check the old version out into its own worktree first (`git worktree add ../pixie-main main`); the runner takes paths, not git refs. Each case runs `--runs` times (default 1) against each checkout, one run after another, since each case serves its fixture on a fixed port.
+
+Results follow skill-creator's benchmark layout: `results/iteration-N/CASE/{new_skill,old_skill}/run-K/{outputs/, grading.json, timing.json}`. `eval_metadata.json` records each checkout's path and commit.
+
+The report shows, for each case and each grader, how many runs passed in each version (`2/3` against `3/3`), with a `*` where they differ. A figure from a single run is marked "indicative only": a model's runs vary, so one run can't tell a real change from noise. Use `--runs 3` or more before trusting a difference. The same data is written to `comparison.json` at the iteration's root.
+
+A comparison exits 1 only when a run errored (a timeout, a crash, a server that didn't start). A failing grader doesn't change its exit code: the point is the difference, not the pass.
+
+**Judgements.** For `design-*` cases, a model also gives its opinion, as a tiebreaker for when the graders can't settle which version is better. It reads only what the decision record left in `docs/design/decisions/`:
+
+- **Screenshot preference:** run K of each version, compared on the `production-STATE-WIDTH.png` shots both captured. The judge is told the case's prompt and asked which version better serves its user. It's asked twice, with the versions in swapped order, and unless both answers pick the same version, the result is "no preference". The report tallies it over the runs.
+- **Direction distinctness:** for each axis in a run's **Axes** table, whether its directions' screenshots visibly differ on it.
+
+Judgements are saved in `CASE/judgement.json`, never in `grading.json`, so they can't change a grader's result, a pass count or the exit code. The judge runs as `claude -p` with `--judge-model` (default `opus`), no settings, no MCP servers, none of your plugins, and `Read` as its only tool, in a temporary folder holding only copies of the screenshots and the axes table. Its answer must be a fixed JSON shape that cites only screenshots in that folder. If the judge fails, times out or answers anything else, that judgement is "not judged" with the reason, and the rest of the comparison is still reported.
+
+**Cost.** A comparison is two full eval runs per `--runs`: `--runs 3` on every case is six of them, and a design case is the longest run there is. Each design case then adds four judge calls per run (two for the preference, one distinctness check per version). `--grade-only` on a comparison grades every run again, each against the checkout it ran with, and rebuilds `comparison.json`. It keeps the saved judgements and never calls the judge, so it costs nothing.
 
 ## Cases
 
