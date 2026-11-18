@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 from .checks import AXE, Context, axe_targets
-from .comparison import CONFIGS, run_dirs
+from .comparison import CONFIGS, ERROR, run_dirs
 from .grade import grade
 from .judge import judge_case
 from .workdir import prepare
@@ -176,20 +176,20 @@ def run_case(case, run_dir, pixie, fixtures):
 
 def run_comparison(case, index, iteration, configs, runs, fixtures, judge_model):
     """Run the case `runs` times against each config ({new_skill: checkout, old_skill: checkout}), one run after
-    another, since each case serves its fixture on a fixed port. Then judge a design-* case. Returns the run errors."""
+    another, since each case serves its fixture on a fixed port. A run's error is saved in its error.txt. Then judge
+    a design-* case."""
     case_dir = iteration / case.name
     write_metadata(case, index, case_dir, configs)
-    errors = []
     for k in range(1, runs + 1):
         for name, pixie in configs.items():
             print(f"  {name} run-{k}...", flush=True)
-            _, error = run_case(case, case_dir / name / f"run-{k}", pixie, fixtures)
+            run_dir = case_dir / name / f"run-{k}"
+            _, error = run_case(case, run_dir, pixie, fixtures)
             if error:
-                errors.append(f"{case.name} {name} run-{k}: {error}")
+                (run_dir / ERROR).write_text(error + "\n")
     if case.name.startswith("design-"):
         print("  judging...", flush=True)
         judge_case(case, case_dir, runs, judge_model)
-    return errors
 
 
 def regrade_run(case, run_dir, pixie):
@@ -221,8 +221,15 @@ def regrade_comparison(iteration, cases):
             continue
         configs = json.loads((case_dir / "eval_metadata.json").read_text()).get("configs", {})
         for name in CONFIGS:
+            if name not in configs:
+                continue
+            pixie = Path(configs[name]["pixie"])
+            now = subprocess.run(["git", "rev-parse", "HEAD"], cwd=pixie, capture_output=True, text=True).stdout
+            if now.strip() != configs[name]["commit"]:
+                print(f"warning: {case.name} {name}: {pixie} is no longer at {configs[name]['commit'][:12]}, "
+                      "the commit it ran with; grading against what it holds now", flush=True)
             for run_dir in run_dirs(case_dir / name):
-                regrade_run(case, run_dir, Path(configs[name]["pixie"]))
+                regrade_run(case, run_dir, pixie)
 
 
 def report(rows):

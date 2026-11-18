@@ -52,16 +52,16 @@ Results follow skill-creator's benchmark layout: `results/iteration-N/CASE/{new_
 
 The report shows, for each case and each grader, how many runs passed in each version (`2/3` against `3/3`), with a `*` where they differ. A figure from a single run is marked "indicative only": a model's runs vary, so one run can't tell a real change from noise. Use `--runs 3` or more before trusting a difference. The same data is written to `comparison.json` at the iteration's root.
 
-A comparison exits 1 only when a run errored (a timeout, a crash, a server that didn't start). A failing grader doesn't change its exit code: the point is the difference, not the pass.
+A comparison exits 1 only when a run errored (a timeout, a crash, a server that didn't start). A failing grader doesn't change its exit code: the point is the difference, not the pass. A run's error is saved in its `error.txt`, so the report, `comparison.json` and `--grade-only` all still show it.
 
 **Judgements.** For `design-*` cases, a model also gives its opinion, as a tiebreaker for when the graders can't settle which version is better. It reads only what the decision record left in `docs/design/decisions/`:
 
 - **Screenshot preference:** run K of each version, compared on the `production-STATE-WIDTH.png` shots both captured. The judge is told the case's prompt and asked which version better serves its user. It's asked twice, with the versions in swapped order, and unless both answers pick the same version, the result is "no preference". The report tallies it over the runs.
 - **Direction distinctness:** for each axis in a run's **Axes** table, whether its directions' screenshots visibly differ on it.
 
-Judgements are saved in `CASE/judgement.json`, never in `grading.json`, so they can't change a grader's result, a pass count or the exit code. The judge runs as `claude -p` with `--judge-model` (default `opus`), no settings, no MCP servers, none of your plugins, and `Read` as its only tool, in a temporary folder holding only copies of the screenshots and the axes table. Its answer must be a fixed JSON shape that cites only screenshots in that folder. If the judge fails, times out or answers anything else, that judgement is "not judged" with the reason, and the rest of the comparison is still reported.
+Judgements are saved in `CASE/judgement.json`, never in `grading.json`, so they can't change a grader's result, a pass count or the exit code. The judge runs as `claude -p` with `--judge-model` (default `opus`), no settings, no MCP servers, none of your plugins, and `Read` as its only tool, confined by `--restricted` to a temporary folder holding only copies of the screenshots and the axes table. Its answer must be a fixed JSON shape that cites only screenshots in that folder. If the judge fails, times out or answers anything else, that judgement is "not judged" with the reason, and the rest of the comparison is still reported.
 
-**Cost.** A comparison is two full eval runs per `--runs`: `--runs 3` on every case is six of them, and a design case is the longest run there is. Each design case then adds four judge calls per run (two for the preference, one distinctness check per version). `--grade-only` on a comparison grades every run again, each against the checkout it ran with, and rebuilds `comparison.json`. It keeps the saved judgements and never calls the judge, so it costs nothing.
+**Cost.** A comparison is two full eval runs per `--runs`: `--runs 3` on every case is six of them, and a design case is the longest run there is. Each design case then adds four judge calls per run (two for the preference, one distinctness check per version). `--grade-only` on a comparison grades every run again, each against the checkout it ran with (it warns if that checkout has moved off the recorded commit), and rebuilds `comparison.json`. It keeps the saved judgements and never calls the judge, so it costs nothing.
 
 ## Cases
 

@@ -6,6 +6,7 @@ import json
 
 CONFIGS = ("new_skill", "old_skill")
 JUDGEMENT = "judgement.json"
+ERROR = "error.txt"  # a run's error, saved so --grade-only still reports it
 PREFERENCES = ("new preferred", "old preferred", "no preference", "not judged")
 
 
@@ -31,11 +32,13 @@ def compare(iteration, cases):
             for config, runs in gradings.items():
                 passed = sum(any(e["text"] == text and e["passed"] for e in g["expectations"]) for g in runs)
                 row[config] = {"passed": passed, "runs": len(runs), "indicative_only": len(runs) == 1}
-            new, old = row["new_skill"], row["old_skill"]
-            row["differs"] = new["passed"] * old["runs"] != old["passed"] * new["runs"]
+            rate = lambda counts: counts["passed"] / counts["runs"] if counts["runs"] else None
+            row["differs"] = rate(row["new_skill"]) != rate(row["old_skill"])
             graders.append(row)
+        errors = [f"{config} {run.name}: {(run / ERROR).read_text().strip()}" for config in CONFIGS
+                  for run in run_dirs(case_dir / config) if (run / ERROR).is_file()]
         judgement = case_dir / JUDGEMENT
-        out.append({"case": case.name, "graders": graders,
+        out.append({"case": case.name, "graders": graders, "errors": errors,
                     "judgements": json.loads(judgement.read_text()) if judgement.is_file() else None})
     return {"cases": out}
 
@@ -45,7 +48,22 @@ def figure(counts):
     return f"{text} (indicative only)" if counts["indicative_only"] else text
 
 
-def report(data, errors):
+def distinctness_lines(run):
+    """Each axis with both versions' verdicts side by side, then any version that wasn't judged."""
+    found = run.get("distinctness", {})
+    verdicts = {}
+    for config, result in found.items():
+        for axis in result.get("axes", []):
+            verdict = "differ" if axis["differs"] else "don't differ"
+            verdicts.setdefault(axis["axis"], []).append(f"{config[:3]} {verdict} ({axis['reason']})")
+    lines = [f"  run-{run['run']} directions on {axis}: {' | '.join(v)}" for axis, v in verdicts.items()]
+    lines += [f"  run-{run['run']} {config} direction distinctness: {result['result']}"
+              for config, result in found.items() if "axes" not in result]
+    return lines
+
+
+def report(data):
+    errors = [f"{case['case']} {error}" for case in data["cases"] for error in case["errors"]]
     print("\nComparison: new_skill (--pixie) against old_skill (--against). * marks a grader whose pass rate differs.")
     for case in data["cases"]:
         print(f"\n{case['case']}")
@@ -64,21 +82,15 @@ def report(data, errors):
         for r in runs:
             if not r["preference"]["result"].endswith("preferred"):
                 print(f"    run-{r['run']}: {r['preference']['result']}")
-            for config, found in r.get("distinctness", {}).items():
-                if "axes" in found:
-                    for axis in found["axes"]:
-                        verdict = "differ" if axis["differs"] else "don't differ"
-                        print(f"  run-{r['run']} {config} directions {verdict} on {axis['axis']}: {axis['reason']}")
-                else:
-                    print(f"  run-{r['run']} {config} direction distinctness: {found['result']}")
+            print("\n".join(distinctness_lines(r)))
     for error in errors:
         print(f"\nRUN ERROR  {error}")
     print(f"\n{len(errors)} run errors" if errors else "\nEvery run completed")
+    return not errors
 
 
-def write_and_report(iteration, cases, errors):
+def write_and_report(iteration, cases):
     """Write comparison.json at the iteration's root and print the report. True when no run had an error."""
     data = compare(iteration, cases)
     (iteration / "comparison.json").write_text(json.dumps(data, indent=2) + "\n")
-    report(data, errors)
-    return not errors
+    return report(data)

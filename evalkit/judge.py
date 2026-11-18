@@ -33,7 +33,7 @@ Which version better serves the user this request is for? Answer with only this 
 
 DISTINCTNESS = """A design tool explored several directions for one design, each placed at a position on some design axes.
 axes.md holds the axes table: each axis and its two poles. The other files are screenshots of the directions, named
-DIRECTION-STATE-WIDTH.png. Read them all with the Read tool. {data}
+DIRECTION-STATE-WIDTH.png: {names}. Read them all with the Read tool. {data}
 
 For each axis, do the directions' screenshots visibly differ on it? Answer with only this JSON, nothing before or
 after it, with one entry for each of these axes: {axes}
@@ -46,8 +46,9 @@ class NotJudged(Exception):
 
 
 def judge_command(prompt, model):
-    """No plugins (no --plugin-dir, and no settings to enable any), no MCP servers, and Read as the only tool."""
-    return ["claude", "-p", prompt, "--model", model, "--setting-sources", "", "--strict-mcp-config",
+    """No plugins (no --plugin-dir, and no settings to enable any), no MCP servers, and Read as the only tool,
+    confined by --restricted to the folder the judge runs in."""
+    return ["claude", "-p", prompt, "--model", model, "--restricted", "--setting-sources", "", "--strict-mcp-config",
             "--tools", "Read", "--allowedTools", "Read", "--output-format", "json", "--no-session-persistence"]
 
 
@@ -63,7 +64,7 @@ def ask(prompt, folder, model):
     try:
         text = json.loads(done.stdout)["result"]
         answer = json.loads(text[text.index("{"):text.rindex("}") + 1])
-    except (ValueError, KeyError, TypeError):
+    except (ValueError, KeyError, TypeError, AttributeError):
         raise NotJudged("its answer isn't JSON")
     if not isinstance(answer, dict):
         raise NotJudged("its answer isn't a JSON object")
@@ -71,13 +72,17 @@ def ask(prompt, folder, model):
 
 
 def check_cited(cited, folder):
-    """Every screenshot the answer cites must be a file in the judge's folder."""
+    """Every screenshot the answer cites must be a PNG in the judge's folder."""
     root = Path(folder).resolve()
     if not isinstance(cited, list) or not cited:
         raise NotJudged("its answer cites no screenshots")
     for name in cited:
-        path = (root / str(name)).resolve()
-        if root not in path.parents or not path.is_file():
+        try:
+            path = (root / str(name)).resolve()
+            given = root in path.parents and path.suffix == ".png" and path.is_file()
+        except (OSError, ValueError):
+            given = False
+        if not given:
             raise NotJudged(f"it cites {name!r}, a screenshot it wasn't given")
 
 
@@ -131,7 +136,8 @@ def distinctness(repo, model):
         for name, path in directions.items():
             shutil.copy2(path, Path(tmp) / name)
         try:
-            answer = ask(DISTINCTNESS.format(axes=", ".join(axes), data=DATA), tmp, model)
+            answer = ask(DISTINCTNESS.format(axes=", ".join(axes), names=", ".join(sorted(directions)), data=DATA),
+                         tmp, model)
             entries = answer.get("axes")
             if not isinstance(entries, list) or not all(
                     isinstance(e, dict) and isinstance(e.get("differs"), bool) and isinstance(e.get("reason"), str)
@@ -146,12 +152,20 @@ def distinctness(repo, model):
     return {"result": "judged", "axes": [{k: e[k] for k in ("axis", "differs", "reason")} for e in entries]}
 
 
+def safely(judge, *args):
+    """A judgement, or "not judged" if anything unexpected goes wrong: the judge never stops a comparison."""
+    try:
+        return judge(*args)
+    except Exception as error:
+        return {"result": f"not judged: {error!r}"}
+
+
 def judge_case(case, case_dir, runs, model):
     """Judge each run-K pair of a case, into CASE/judgement.json."""
     out = []
     for k in range(1, runs + 1):
         repos = {config: case_dir / config / f"run-{k}" / "outputs" / "repo" for config in CONFIGS}
         out.append({"run": k,
-                    "preference": preference(repos["new_skill"], repos["old_skill"], case.prompt, model),
-                    "distinctness": {config: distinctness(repo, model) for config, repo in repos.items()}})
+                    "preference": safely(preference, repos["new_skill"], repos["old_skill"], case.prompt, model),
+                    "distinctness": {config: safely(distinctness, repo, model) for config, repo in repos.items()}})
     (case_dir / JUDGEMENT).write_text(json.dumps({"runs": out}, indent=2) + "\n")

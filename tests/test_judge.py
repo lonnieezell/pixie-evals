@@ -70,6 +70,7 @@ class JudgeCommandTest(unittest.TestCase):
         self.assertEqual(flag("--allowedTools"), "Read")
         self.assertEqual(flag("--model"), "opus")
         self.assertIn("--strict-mcp-config", command)
+        self.assertIn("--restricted", command, "Read is confined to the judge's folder")
         self.assertNotIn("--plugin-dir", command)
 
 
@@ -105,6 +106,8 @@ class PreferenceTest(unittest.TestCase):
             "claude fails": ((1,), "not judged: claude exited with 1"),
             "claude times out": ((subprocess.TimeoutExpired("claude", 600),), "not judged: timed out"),
             "the second order fails": ((pick("A"), "oops"), "not judged: "),
+            "a result that isn't text": ((json.dumps({"result": 7}),), "not judged: "),
+            "a cited name with a NUL byte": ((pick("A", ["A/\0.png"]),), "not judged: "),
         }
         for name, (answers, prefix) in cases.items():
             with self.subTest(name):
@@ -138,9 +141,22 @@ class DistinctnessTest(unittest.TestCase):
         self.assertEqual(fake.folders, [["axes.md", "card-grid-typical-1280.png", "compact-list-typical-1280.png"]],
                          "the judge sees the axes table and the directions' screenshots, not production shots")
 
-    def test_an_answer_missing_an_axis_is_not_judged(self):
-        result, _ = self.judge({"axes": [self.axis("Density", True)]})
-        self.assertTrue(result["result"].startswith("not judged: "), result)
+    def test_not_judged(self):
+        cases = {
+            "an answer missing an axis": {"axes": [self.axis("Density", True)]},
+            "an answer citing the axes table, not a screenshot": {"axes": [
+                {**self.axis("Density", True), "screenshots": ["axes.md"]}, self.axis("Emphasis", False)]},
+        }
+        for name, answer in cases.items():
+            with self.subTest(name):
+                result, _ = self.judge(answer)
+                self.assertTrue(result["result"].startswith("not judged: "), result)
+
+    def test_the_prompt_names_every_screenshot(self):
+        _, fake = self.judge({"axes": [self.axis("Density", True), self.axis("Emphasis", False)]})
+        prompt = fake.call_args.args[0][2]
+        for shot in ("compact-list-typical-1280.png", "card-grid-typical-1280.png"):
+            self.assertIn(shot, prompt, "Read can't list a folder, so the judge must be told each file's name")
 
 
 if __name__ == "__main__":
